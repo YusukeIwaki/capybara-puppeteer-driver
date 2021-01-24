@@ -2,6 +2,7 @@
 
 require 'bundler/setup'
 require 'capybara/puppeteer'
+require 'capybara/rspec'
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -12,5 +13,9 @@ RSpec.configure do |config|
 
   config.expect_with :rspec do |c|
     c.syntax = :expect
+  end
+
+  config.define_derived_metadata(file_path: %r(/spec/capybara/)) do |metadata|
+    metadata[:type] = :feature
   end
 end

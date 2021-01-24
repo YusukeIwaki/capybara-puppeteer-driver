@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-require 'capybara/puppeteer/version'
+require 'puppeteer'
+require 'capybara'
 
-module Capybara
-  module Puppeteer
-    class Error < StandardError; end
-    # Your code goes here...
-  end
+Capybara.register_driver(:puppeteer) do |app|
+  Capybara::Puppeteer::Driver.new(app)
 end
