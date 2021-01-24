@@ -2,7 +2,7 @@ require 'spec_helper'
 
 RSpec.describe 'Example' do
   before(:all) do
-    Capybara.default_driver = :selenium_chrome
+    Capybara.default_driver = :puppeteer
     Capybara.save_path = 'tmp/capybara'
   end
 
