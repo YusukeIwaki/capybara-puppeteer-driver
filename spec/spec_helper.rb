@@ -15,7 +15,15 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 
-  config.define_derived_metadata(file_path: %r(/spec/capybara/)) do |metadata|
+  config.define_derived_metadata(file_path: %r(/spec/feature/)) do |metadata|
     metadata[:type] = :feature
   end
 end
+
+Capybara.register_driver(:puppeteer) do |app|
+  Capybara::Puppeteer::Driver.new(app, headless: ENV['CI'] ? true : false)
+end
+
+Capybara.default_driver = :puppeteer
+Capybara.save_path = 'tmp/capybara'
+Capybara.server = :webrick

@@ -20,11 +20,13 @@ class Capybara::Puppeteer::Browser
 
   def visit(path)
     url =
-      if Capybara.app_host
-        URI(Capybara.app_host).merge(path)
-      else
-        path
-      end
+    if Capybara.app_host
+      URI(Capybara.app_host).merge(path)
+    elsif Capybara.default_host
+      URI(Capybara.default_host).merge(path)
+    else
+      path
+    end
 
     @puppeteer_page.goto(url)
   end

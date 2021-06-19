@@ -24,9 +24,13 @@ Gem::Specification.new do |spec|
   spec.require_paths = ['lib']
 
   spec.add_dependency 'capybara'
-  spec.add_dependency 'puppeteer-ruby', '>= 0.28.1'
+  spec.add_dependency 'puppeteer-ruby', '>= 0.32.3'
   spec.add_development_dependency 'bundler', '~> 2.2.3'
+  spec.add_development_dependency 'launchy', '>= 2.0.4'
   spec.add_development_dependency 'pry-byebug'
   spec.add_development_dependency 'rake', '~> 13.0.3'
   spec.add_development_dependency 'rspec', '~> 3.10.0'
+  spec.add_development_dependency 'rubocop-rspec'
+  spec.add_development_dependency 'sinatra', '>= 1.4.0'
+  spec.add_development_dependency 'webrick'
 end

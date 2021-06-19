@@ -1,9 +1,11 @@
 require 'spec_helper'
 
 RSpec.describe 'Example' do
-  before(:all) do
-    Capybara.default_driver = :puppeteer
-    Capybara.save_path = 'tmp/capybara'
+  around do |example|
+    previous_wait_time = Capybara.default_max_wait_time
+    Capybara.default_max_wait_time = 15
+    example.run
+    Capybara.default_max_wait_time = previous_wait_time
   end
 
   it 'take a screenshot' do
