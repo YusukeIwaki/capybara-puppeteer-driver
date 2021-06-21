@@ -31,15 +31,15 @@ module Capybara
       end
 
       def find_xpath(query, **options)
-        @puppeteer_page.capybara_current_frame.wait_for_xpath(query, visible: true, timeout: capybara_default_wait_time)
+        @puppeteer_page.capybara_current_frame.wait_for_xpath(query, timeout: capybara_default_wait_time)
         @puppeteer_page.capybara_current_frame.Sx(query).map do |el|
           Node.new(@driver, @puppeteer_page, el)
         end
       end
 
       def find_css(query, **options)
-        @puppeteer_page.capybara_current_frame.wait_for_selector(query, visible: true, timeout: capybara_default_wait_time)
-        @puppeteer_page.capybara_current_frame.SS(query).map do |el|
+        @puppeteer_page.capybara_current_frame.wait_for_selector(query, timeout: capybara_default_wait_time)
+        @puppeteer_page.capybara_current_frame.query_selector_all(query).map do |el|
           Node.new(@driver, @puppeteer_page, el)
         end
       end
@@ -76,12 +76,65 @@ module Capybara
         @puppeteer_page.go_forward
       end
 
+      def execute_script(script, *args)
+        @puppeteer_page.capybara_current_frame.evaluate("function () { #{script} }", *unwrap_node(args))
+        nil
+      end
+
+      def evaluate_script(script, *args)
+        result = @puppeteer_page.capybara_current_frame.evaluate_handle("function () { return #{script} }", *unwrap_node(args))
+        wrap_node(result)
+      end
+
+      def evaluate_async_script(script, *args)
+        js = <<~JAVASCRIPT
+        function(){
+          let args = Array.prototype.slice.call(arguments);
+          return new Promise((resolve, reject) => {
+            args.push(resolve);
+            (function(){ #{script} }).apply(this, args);
+          });
+        }
+        JAVASCRIPT
+        result = @puppeteer_page.capybara_current_frame.evaluate_handle(js, *unwrap_node(args))
+        wrap_node(result)
+      end
+
       def save_screenshot(path, **options)
         @puppeteer_page.screenshot(path: path)
       end
 
       private def capybara_default_wait_time
         Capybara.default_max_wait_time * 1000
+      end
+
+      private def unwrap_node(args)
+        args.map do |arg|
+          if arg.is_a?(Node)
+            arg.send(:element)
+          else
+            arg
+          end
+        end
+      end
+
+      private def wrap_node(arg)
+        case arg
+        when Array
+          arg.map do |item|
+            wrap_node(item)
+          end
+        when Hash
+          arg.map do |key, value|
+            [key, wrap_node(value)]
+          end.to_h
+        when ::Puppeteer::ElementHandle
+          Node.new(@driver, @puppeteer_page, arg)
+        when ::Puppeteer::JSHandle
+          arg.json_value
+        else
+          arg
+        end
       end
     end
   end
