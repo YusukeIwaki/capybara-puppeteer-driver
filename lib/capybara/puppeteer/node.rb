@@ -520,7 +520,9 @@ module Capybara
       end
 
       def ==(other)
-        @element.evaluate('(other) => this == other', other.native)
+        return false unless other.is_a?(Node)
+
+        @element.evaluate('(self, other) => self == other', other.native)
       end
 
       def find_xpath(query, **options)
