@@ -1,5 +1,13 @@
 module Capybara
   module Puppeteer
+    module FramePatch
+      def frame_element(frame_id)
+        result = @client.send_message('DOM.getFrameOwner', frameId: frame_id)
+        execution_context.adopt_backend_node_id(result['backendNodeId'])
+      end
+    end
+    ::Puppeteer::Frame.prepend(FramePatch)
+
     module ElementHandlePatch
       def select_all
         evaluate(<<~JAVASCRIPT)
@@ -26,6 +34,46 @@ module Capybara
           @page.keyboard.type_text(text, delay: delay)
         end
       end
+
+      def owner_frame
+        doc_handle = evaluate_handle(<<~JAVASCRIPT)
+        node => {
+          if (node.documentElement && node.documentElement.ownerDocument === node)
+            return node.documentElement;
+          else
+            return node.ownerDocument ? node.ownerDocument.documentElement : null;
+        }
+        JAVASCRIPT
+
+        frame = doc_handle&.content_frame
+        doc_handle&.dispose
+        frame
+      end
+
+      # ref: https://github.com/teamcapybara/capybara/blob/f7ab0b5cd5da86185816c2d5c30d58145fe654ed/lib/capybara/selenium/node.rb#L523
+      OBSCURED_OR_OFFSET_SCRIPT = <<~JAVASCRIPT
+      (el, x, y) => {
+        var box = el.getBoundingClientRect();
+        if (!x && x != 0) x = box.width / 2;
+        if (!y && y != 0) y = box.height / 2;
+        var px = box.left + x,
+            py = box.top + y,
+            e = document.elementFromPoint(px, py);
+        if (!el.contains(e))
+          return true;
+        return { x: px, y: py };
+      }
+      JAVASCRIPT
+
+      def capybara_obscured?(x: nil, y: nil)
+        res = evaluate(OBSCURED_OR_OFFSET_SCRIPT, x, y)
+        return true if res == true
+
+        # ref: https://github.com/teamcapybara/capybara/blob/f7ab0b5cd5da86185816c2d5c30d58145fe654ed/lib/capybara/selenium/driver.rb#L182
+        frame = owner_frame
+        return false unless frame&.parent_frame
+        frame.parent_frame.frame_element(frame.id).capybara_obscured?(x: res['x'], y: res['y'])
+      end
     end
     ::Puppeteer::ElementHandle.prepend(ElementHandlePatch)
 
@@ -39,10 +87,6 @@ module Capybara
         super(driver, element)
         @page = page
         @element = element
-      end
-
-      protected def element
-        @element
       end
 
       def all_text
@@ -293,8 +337,68 @@ module Capybara
         raise NotImplementedError
       end
 
-      def scroll_to(element, alignment, position = nil)
-        raise NotImplementedError
+      def scroll_to(element, location, position = nil)
+        # location, element = element, nil if element.is_a? Symbol
+        if element.is_a?(Capybara::Puppeteer::Node)
+          scroll_element_to_location(element, location)
+        elsif location.is_a?(Symbol)
+          scroll_to_location(location)
+        else
+          scroll_to_coords(*position)
+        end
+
+        self
+      end
+
+      private def scroll_element_to_location(element, location)
+        scroll_opts =
+          case location
+          when :top
+            'true'
+          when :bottom
+            'false'
+          when :center
+            "{behavior: 'instant', block: 'center'}"
+          else
+            raise ArgumentError, "Invalid scroll_to location: #{location}"
+          end
+
+        element.native.evaluate("(el) => { el.scrollIntoView(#{scroll_opts}) }")
+      end
+
+      SCROLL_POSITIONS = {
+        top: '0',
+        bottom: 'el.scrollHeight',
+        center: '(el.scrollHeight - el.clientHeight)/2'
+      }.freeze
+
+      private def scroll_to_location(location)
+        position = SCROLL_POSITIONS[location]
+
+        @element.evaluate(<<~JAVASCRIPT)
+        (el) => {
+          if (el.scrollTo){
+            el.scrollTo(0, #{position});
+          } else {
+            el.scrollTop = #{position};
+          }
+        }
+        JAVASCRIPT
+      end
+
+      private def scroll_to_coords(x, y)
+        js = <<~JAVASCRIPT
+        (el, x, y) => {
+          if (el.scrollTo){
+            el.scrollTo(x, y);
+          } else {
+            el.scrollTop = y;
+            el.scrollLeft = x;
+          }
+        }
+        JAVASCRIPT
+
+        @element.evaluate(js, x, y)
       end
 
       def tag_name
@@ -334,7 +438,7 @@ module Capybara
       end
 
       def obscured?
-        raise NotImplementedError
+        @element.capybara_obscured?
       end
 
       def checked?
@@ -416,7 +520,7 @@ module Capybara
       end
 
       def ==(other)
-        @element.evaluate('(other) => this == other', other.element)
+        @element.evaluate('(other) => this == other', other.native)
       end
 
       def find_xpath(query, **options)

@@ -104,6 +104,19 @@ module Capybara
         @puppeteer_page.screenshot(path: path)
       end
 
+      def switch_to_frame(frame)
+        case frame
+        when :top
+          @puppeteer_page.capybara_reset_frames
+        when :parent
+          @puppeteer_page.capybara_pop_frame
+        else
+          puppeteer_frame = frame.native.content_frame
+          raise ArgumentError.new("Not a frame element: #{frame}") unless puppeteer_frame
+          @puppeteer_page.capybara_push_frame(puppeteer_frame)
+        end
+      end
+
       private def capybara_default_wait_time
         Capybara.default_max_wait_time * 1000
       end
@@ -111,7 +124,7 @@ module Capybara
       private def unwrap_node(args)
         args.map do |arg|
           if arg.is_a?(Node)
-            arg.send(:element)
+            arg.native
           else
             arg
           end
