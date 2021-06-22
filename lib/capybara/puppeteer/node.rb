@@ -512,7 +512,97 @@ module Capybara
       end
 
       def trigger(event)
-        raise NotSupportedByDriverError, 'Capybara::Driver::Node#trigger'
+        Trigger.new(@element, event).execute
+      end
+
+      class Trigger
+        # https://github.com/microsoft/playwright/blob/837ee08a53f205325825874bbed8b30e3eb02dd5/src/server/injected/injectedScript.ts#L705
+        EVENT_TYPES = [
+          ['auxclick', 'mouse'],
+          ['click', 'mouse'],
+          ['dblclick', 'mouse'],
+          ['mousedown','mouse'],
+          ['mouseeenter', 'mouse'],
+          ['mouseleave', 'mouse'],
+          ['mousemove', 'mouse'],
+          ['mouseout', 'mouse'],
+          ['mouseover', 'mouse'],
+          ['mouseup', 'mouse'],
+          ['mouseleave', 'mouse'],
+          ['mousewheel', 'mouse'],
+
+          ['keydown', 'keyboard'],
+          ['keyup', 'keyboard'],
+          ['keypress', 'keyboard'],
+          ['textInput', 'keyboard'],
+
+          ['touchstart', 'touch'],
+          ['touchmove', 'touch'],
+          ['touchend', 'touch'],
+          ['touchcancel', 'touch'],
+
+          ['pointerover', 'pointer'],
+          ['pointerout', 'pointer'],
+          ['pointerenter', 'pointer'],
+          ['pointerleave', 'pointer'],
+          ['pointerdown', 'pointer'],
+          ['pointerup', 'pointer'],
+          ['pointermove', 'pointer'],
+          ['pointercancel', 'pointer'],
+          ['gotpointercapture', 'pointer'],
+          ['lostpointercapture', 'pointer'],
+
+          ['focus', 'focus'],
+          ['blur', 'focus'],
+
+          ['drag', 'drag'],
+          ['dragstart', 'drag'],
+          ['dragend', 'drag'],
+          ['dragover', 'drag'],
+          ['dragenter', 'drag'],
+          ['dragleave', 'drag'],
+          ['dragexit', 'drag'],
+          ['drop', 'drag'],
+        ].to_h
+
+        def initialize(element, event)
+          # https://github.com/microsoft/playwright/blob/837ee08a53f205325825874bbed8b30e3eb02dd5/src/server/injected/injectedScript.ts#L629
+          @element = element
+          @event_type = event
+          @event = EVENT_TYPES[event.to_s]
+          raise ArgumentError.new("Unknown event type: '#{event}'") unless @event
+        end
+
+        def execute
+          js = <<~JAVASCRIPT
+          (el, eventType) => {
+            const eventInit = { bubbles: true, cancelable: true, composed: true };
+            const event = new #{event_class}(eventType, eventInit);
+            el.dispatchEvent(event);
+          }
+          JAVASCRIPT
+
+          @element.evaluate(js, @event_type)
+        end
+
+        private def event_class
+          case @event
+          when 'mouse'
+            :MouseEvent
+          when 'keyboard'
+            :KeyboardEvent
+          when 'touch'
+            :TouchEvent
+          when 'pointer'
+            :PointerEvent
+          when 'focus'
+            :FocusEvent
+          when 'drag'
+            :DragEvent
+          else
+            :Event
+          end
+        end
       end
 
       def inspect
