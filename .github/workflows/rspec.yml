@@ -1,0 +1,19 @@
+name: Check
+
+on: [pull_request]
+
+jobs:
+  check:
+    name: RSpec
+    runs-on: ubuntu-latest
+    container: circleci/ruby:2.7.3-buster-node-browsers
+    steps:
+      # このDockerファイルは、デフォルトユーザではなくUSERをcirceciに変更するので、このイメージのファイルの権限をGH Actionsで動作するように変更しなければならない。
+      # https://docs.github.com/actions/reference/virtual-environments-for-github-hosted-runners#docker-container-filesystem を参照
+      - name: Setup file system permissions
+        run: sudo chmod -R 777 $GITHUB_WORKSPACE /github /__w/_temp
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: gem install bundler:2.2.3 && bundle install --path vendor/bundle
+      - run: bundle exec rspec --format documentation
+        timeout-minutes: 45
