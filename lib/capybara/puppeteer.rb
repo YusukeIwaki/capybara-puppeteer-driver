@@ -4,9 +4,7 @@ require 'puppeteer'
 require 'capybara'
 
 require 'capybara/puppeteer/browser'
+require 'capybara/puppeteer/browser_options'
 require 'capybara/puppeteer/driver'
 require 'capybara/puppeteer/node'
-
-Capybara.register_driver(:puppeteer) do |app|
-  Capybara::Puppeteer::Driver.new(app, headless: false)
-end
+require 'capybara/puppeteer/page'
