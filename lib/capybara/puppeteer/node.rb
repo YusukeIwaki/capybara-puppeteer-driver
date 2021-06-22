@@ -24,6 +24,32 @@ module Capybara
         JAVASCRIPT
       end
 
+      def click(position: nil, delay: nil, button: nil, click_count: nil)
+        if position
+          click_with_offset(
+            x: position[:x],
+            y: position[:y],
+            delay: delay,
+            button: button,
+            click_count: click_count,
+          )
+        else
+          super(
+            delay: delay,
+            button: button,
+            click_count: click_count,
+          )
+        end
+      end
+
+      def click_with_offset(x:, y:, delay: nil, button: nil, click_count: nil)
+        scroll_into_view_if_needed
+        box = bounding_box
+        # FIXME: consider border.
+        # https://github.com/microsoft/playwright/blob/af18b314730fbcb387be62d2bbf757b5cdda5f96/src/server/dom.ts#L278
+        @page.mouse.click(box.x + x, box.y + y, delay: delay, button: button, click_count: click_count)
+      end
+
       # likely to type_text, except for overwriting the input instead of inserting.
       def fill_text(text, delay: nil)
         click # #focus is not enough for executing selectAll against ContentEditable.
@@ -302,31 +328,348 @@ module Capybara
       end
 
       def click(keys = [], **options)
-        if visible?
-          @element.click
-        else
-          super
+        click_options = ClickOptions.new(@element, keys, options)
+        params = click_options.as_params
+        click_options.with_modifiers_pressing(@page.keyboard) do
+          @element.click(**params)
         end
       end
 
       def right_click(keys = [], **options)
-        raise NotImplementedError
+        click_options = ClickOptions.new(@element, keys, options)
+        params = click_options.as_params
+        params[:button] = 'right'
+        click_options.with_modifiers_pressing(@page.keyboard) do
+          @element.click(**params)
+        end
       end
 
       def double_click(keys = [], **options)
-        raise NotImplementedError
+        click_options = ClickOptions.new(@element, keys, options)
+        params = click_options.as_params
+        params[:click_count] = 2
+        click_options.with_modifiers_pressing(@page.keyboard) do
+          @element.click(**params)
+        end
+      end
+
+      class ClickOptions
+        MODIFIERS = {
+          alt: 'Alt',
+          ctrl: 'Control',
+          control: 'Control',
+          meta: 'Meta',
+          command: 'Meta',
+          cmd: 'Meta',
+          shift: 'Shift',
+        }.freeze
+
+        def initialize(element, keys, options)
+          @element = element
+          @modifiers = keys.map do |key|
+            MODIFIERS[key.to_sym] or raise ArgumentError.new("Unknown modifier key: #{key}")
+          end
+          if options[:x] && options[:y]
+            @coords = {
+              x: options[:x],
+              y: options[:y],
+            }
+            @offset_center = options[:offset] == :center
+          end
+          @delay = options[:delay]
+        end
+
+        def as_params
+          {
+            delay: delay_ms,
+            position: position,
+          }.compact
+        end
+
+        def with_modifiers_pressing(keyboard, &block)
+          @modifiers.each { |key| keyboard.down(key) }
+          block.call
+          @modifiers.each { |key| keyboard.up(key) }
+        end
+
+        private def delay_ms
+          if @delay && @delay > 0
+            @delay * 1000
+          else
+            nil
+          end
+        end
+
+        private def position
+          if @offset_center
+            box = @element.bounding_box
+
+            {
+              x: @coords[:x] + box.width / 2,
+              y: @coords[:y] + box.height / 2,
+            }
+          else
+            @coords
+          end
+        end
       end
 
       def send_keys(*args)
-        raise NotImplementedError
+        SendKeys.new(@element, @page.keyboard, args).execute
+      end
+
+      class SendKeys
+        MODIFIERS = {
+          alt: 'Alt',
+          ctrl: 'Control',
+          control: 'Control',
+          meta: 'Meta',
+          command: 'Meta',
+          cmd: 'Meta',
+          shift: 'Shift',
+        }.freeze
+
+        KEYS = {
+          cancel: 'Cancel',
+          help: 'Help',
+          backspace: 'Backspace',
+          tab: 'Tab',
+          clear: 'Clear',
+          return: 'Enter',
+          enter: 'Enter',
+          shift: 'Shift',
+          control: 'Control',
+          alt: 'Alt',
+          pause: 'Pause',
+          escape: 'Escape',
+          space: 'Space',
+          page_up: 'PageUp',
+          page_down: 'PageDown',
+          end: 'End',
+          home: 'Home',
+          left: 'ArrowLeft',
+          up: 'ArrowUp',
+          right: 'ArrowRight',
+          down: 'ArrowDown',
+          insert: 'Insert',
+          delete: 'Delete',
+          semicolon: 'Semicolon',
+          equals: 'Equal',
+          numpad0: 'Numpad0',
+          numpad1: 'Numpad1',
+          numpad2: 'Numpad2',
+          numpad3: 'Numpad3',
+          numpad4: 'Numpad4',
+          numpad5: 'Numpad5',
+          numpad6: 'Numpad6',
+          numpad7: 'Numpad7',
+          numpad8: 'Numpad8',
+          numpad9: 'Numpad9',
+          multiply: 'NumpadMultiply',
+          add: 'NumpadAdd',
+          separator: 'NumpadDecimal',
+          subtract: 'NumpadSubtract',
+          decimal: 'NumpadDecimal',
+          divide: 'NumpadDivide',
+          f1: 'F1',
+          f2: 'F2',
+          f3: 'F3',
+          f4: 'F4',
+          f5: 'F5',
+          f6: 'F6',
+          f7: 'F7',
+          f8: 'F8',
+          f9: 'F9',
+          f10: 'F10',
+          f11: 'F11',
+          f12: 'F12',
+          meta: 'Meta',
+          command: 'Meta',
+        }
+
+        def initialize(element_or_keyboard, keyboard, keys)
+          @element_or_keyboard = element_or_keyboard
+          @keyboard = keyboard
+
+          holding_keys = []
+          @executables = keys.each_with_object([]) do |key, executables|
+            if MODIFIERS[key]
+              holding_keys << key
+            else
+              if holding_keys.empty?
+                case key
+                when String
+                  executables << TypeText.new(key)
+                when Symbol
+                  executables << PressKey.new(
+                    keyboard: @keyboard,
+                    key: key_for(key),
+                    modifiers: [],
+                  )
+                when Array
+                  _key = key.last
+                  code =
+                    if _key.is_a?(String) && _key.length == 1
+                      _key.upcase
+                    elsif _key.is_a?(Symbol)
+                      key_for(_key)
+                    else
+                      raise ArgumentError.new("invalid key: #{_key}. Symbol of 1-length String is expected.")
+                    end
+                  modifiers = key.first(key.size - 1).map { |k| modifier_for(k) }
+                  executables << PressKey.new(
+                    keyboard: @keyboard,
+                    key: code,
+                    modifiers: modifiers,
+                  )
+                end
+              else
+                modifiers = holding_keys.map { |k| modifier_for(k) }
+
+                case key
+                when String
+                  key.each_char do |char|
+                    executables << PressKey.new(
+                      keyboard: @keyboard,
+                      key: char.upcase,
+                      modifiers: modifiers,
+                    )
+                  end
+                when Symbol
+                  executables << PressKey.new(
+                    keyboard: @keyboard,
+                    key: key_for(key),
+                    modifiers: modifiers
+                  )
+                else
+                  raise ArgumentError.new("#{key} cannot be handled with holding key #{holding_keys}")
+                end
+              end
+            end
+          end
+        end
+
+        private def modifier_for(modifier)
+          MODIFIERS[modifier] or raise ArgumentError.new("invalid modifier specified: #{modifier}")
+        end
+
+        private def key_for(key)
+          KEYS[key] or raise ArgumentError.new("invalid key specified: #{key}")
+        end
+
+        def execute
+          @executables.each do |executable|
+            executable.execute_for(@element_or_keyboard)
+          end
+        end
+
+        class PressKey
+          def initialize(keyboard:, key:, modifiers:)
+            # puts "PressKey: key=#{key} modifiers: #{modifiers}"
+            @keyboard = keyboard
+            @modifiers = modifiers
+          end
+
+          def execute_for(element)
+            with_modifiers_pressing do
+              element.press(@key)
+            end
+          end
+
+          private def with_modifiers_pressing(&block)
+            @modifiers.each { |key| @keyboard.down(key) }
+            block.call
+            @modifiers.each { |key| @keyboard.up(key) }
+          end
+        end
+
+        class TypeText
+          def initialize(text)
+            @text = text
+          end
+
+          def execute_for(element)
+            element.type(@text)
+          end
+        end
       end
 
       def hover
-        raise NotImplementedError
+        @element.hover
       end
 
       def drag_to(element, **options)
-        raise NotImplementedError
+        DragTo.new(@page, @element, element.native, options).execute
+      end
+
+      class DragTo
+        MODIFIERS = {
+          alt: 'Alt',
+          ctrl: 'Control',
+          control: 'Control',
+          meta: 'Meta',
+          command: 'Meta',
+          cmd: 'Meta',
+          shift: 'Shift',
+        }.freeze
+
+        # @param page [Playwright::Page]
+        # @param source [Playwright::ElementHandle]
+        # @param target [Playwright::ElementHandle]
+        def initialize(page, source, target, options)
+          @page = page
+          @source = source
+          @target = target
+          @options = options
+        end
+
+        def execute
+          @source.scroll_into_view_if_needed
+
+          # down
+          position_from = center_of(@source)
+          @page.mouse.move(*position_from)
+          @page.mouse.down
+
+          @target.scroll_into_view_if_needed
+
+          # move and up
+          sleep_delay
+          position_to = center_of(@target)
+          with_key_pressing(drop_modifiers) do
+            @page.mouse.move(*position_to, steps: 6)
+            sleep_delay
+            @page.mouse.up
+          end
+          sleep_delay
+        end
+
+        # @param element [Playwright::ElementHandle]
+        private def center_of(element)
+          box = element.bounding_box
+          [box.x + box.width / 2, box.y + box.height / 2]
+        end
+
+        private def with_key_pressing(keys, &block)
+          keys.each { |key| @page.keyboard.down(key) }
+          block.call
+          keys.each { |key| @page.keyboard.up(key) }
+        end
+
+        # @returns Array<String>
+        private def drop_modifiers
+          return [] unless @options[:drop_modifiers]
+
+          Array(@options[:drop_modifiers]).map do |key|
+            MODIFIERS[key.to_sym]  or raise ArgumentError.new("Unknown modifier key: #{key}")
+          end
+        end
+
+        private def sleep_delay
+          return unless @options[:delay]
+
+          sleep @options[:delay]
+        end
       end
 
       def drop(*args)
@@ -334,7 +677,18 @@ module Capybara
       end
 
       def scroll_by(x, y)
-        raise NotImplementedError
+        js = <<~JAVASCRIPT
+        (el, x, y) => {
+          if (el.scrollBy){
+            el.scrollBy(x, y);
+          } else {
+            el.scrollTop = el.scrollTop + y;
+            el.scrollLeft = el.scrollLeft + x;
+          }
+        }
+        JAVASCRIPT
+
+        @element.evaluate(js, x, y)
       end
 
       def scroll_to(element, location, position = nil)

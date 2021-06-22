@@ -100,6 +100,10 @@ module Capybara
         wrap_node(result)
       end
 
+      def send_keys(*args)
+        Node::SendKeys.new(@puppeteer_page.keyboard, @puppeteer_page.keyboard, args).execute
+      end
+
       def save_screenshot(path, **options)
         @puppeteer_page.screenshot(path: path)
       end

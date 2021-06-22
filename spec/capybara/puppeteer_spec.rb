@@ -9,8 +9,10 @@ end
 
 Capybara::SpecHelper.run_specs TestSessions::Puppeteer, 'Puppeteer' do |example|
   case example.metadata[:full_description]
-  when /Element#drop/
-    pending 'not implemented'
+  when /when details is toggled open and closed/
+    pending "NoMethodError: undefined method `and' for #<Capybara::RSpecMatchers::Matchers::HaveSelector:0x00007f9bafd56900>"
+  when /drag_to.*HTML5/, /Element#drop/
+    skip 'not implemented'
   when /Capybara::Window#maximize/,
        /Capybara::Window#fullscreen/
     skip 'not supported in Puppeteer driver'
