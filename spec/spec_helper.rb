@@ -18,6 +18,11 @@ RSpec.configure do |config|
   config.define_derived_metadata(file_path: %r(/spec/feature/)) do |metadata|
     metadata[:type] = :feature
   end
+
+  config.around(:each) do |example|
+    require 'timeout'
+    Timeout.timeout(15) { example.run }
+  end
 end
 
 Capybara.register_driver(:puppeteer) do |app|
