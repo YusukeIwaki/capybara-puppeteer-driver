@@ -30,15 +30,23 @@ module Capybara
         @puppeteer_page.capybara_current_frame.evaluate('() => { location.reload(true) }')
       end
 
+      private def called_from_assertion?
+        caller_locations.any?{ |loc| loc.label.start_with?('assert_') }
+      end
+
       def find_xpath(query, **options)
-        @puppeteer_page.capybara_current_frame.wait_for_xpath(query, timeout: capybara_default_wait_time)
+        unless called_from_assertion?
+          @puppeteer_page.capybara_current_frame.wait_for_xpath(query, timeout: capybara_default_wait_time)
+        end
         @puppeteer_page.capybara_current_frame.Sx(query).map do |el|
           Node.new(@driver, @puppeteer_page, el)
         end
       end
 
       def find_css(query, **options)
-        @puppeteer_page.capybara_current_frame.wait_for_selector(query, timeout: capybara_default_wait_time)
+        unless called_from_assertion?
+          @puppeteer_page.capybara_current_frame.wait_for_selector(query, timeout: capybara_default_wait_time)
+        end
         @puppeteer_page.capybara_current_frame.query_selector_all(query).map do |el|
           Node.new(@driver, @puppeteer_page, el)
         end
