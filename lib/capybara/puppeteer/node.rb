@@ -149,7 +149,7 @@ module Capybara
       end
 
       private def property(name)
-        @element.evaluate(<<~JAVASCRIPT)
+        js = <<~JAVASCRIPT
         (el, name) => {
           const value = el[name];
           if (['object', 'function'].includes(typeof value)) {
@@ -159,6 +159,8 @@ module Capybara
           }
         }
         JAVASCRIPT
+
+        @element.evaluate(js, name)
       end
 
       private def attribute(name)
@@ -180,6 +182,8 @@ module Capybara
       def style(styles)
         raise NotImplementedError
       end
+
+      class NotActionableError < StandardError ; end
 
       # @param value [String, Array] Array is only allowed if node has 'multiple' attribute
       # @param options [Hash] Driver specific options for how to set a value on a node
@@ -218,6 +222,8 @@ module Capybara
           end
 
         settable_class.new(@element, capybara_default_wait_time).set(value, **options)
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       class Settable
@@ -229,16 +235,20 @@ module Capybara
 
       class RadioButton < Settable
         def set(_, **options)
-          @element.check(timeout: @timeout)
+          @element.click
         end
       end
 
       class Checkbox < Settable
         def set(value, **options)
-          if value
-            @element.check(timeout: @timeout)
-          else
-            @element.uncheck(timeout: @timeout)
+          checked = @element.evaluate('el => !!el.checked')
+
+          if value && !checked
+            # check
+            @element.click
+          elsif !value && checked
+            # uncheck
+            @element.click
           end
         end
       end

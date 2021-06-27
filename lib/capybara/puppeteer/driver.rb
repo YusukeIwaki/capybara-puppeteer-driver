@@ -49,6 +49,7 @@ module Capybara
 
       def invalid_element_errors
         @invalid_element_errors ||= [
+          Node::NotActionableError,
           Node::StaleReferenceError,
         ].freeze
       end
