@@ -129,6 +129,35 @@ module Capybara
         end
       end
 
+      def window_handles
+        @puppeteer_browser.pages.map(&:capybara_id)
+      end
+
+      def current_window_handle
+        @puppeteer_page.capybara_id
+      end
+
+      def open_new_window(kind = :tab)
+        @puppeteer_browser.new_page
+      end
+
+      private def on_window(handle, &block)
+        page = @puppeteer_browser.pages.find { |page| page.capybara_id == handle }
+        if page
+          block.call(page)
+        else
+          raise NoSuchWindowError
+        end
+      end
+
+      def switch_to_window(handle)
+        return if current_window_handle == handle
+
+        on_window(handle) do |page|
+          @puppeteer_page = page.tap(&:bring_to_front)
+        end
+      end
+
       private def capybara_default_wait_time
         Capybara.default_max_wait_time * 1000
       end
