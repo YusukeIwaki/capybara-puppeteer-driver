@@ -158,6 +158,14 @@ module Capybara
         end
       end
 
+      def accept_modal(dialog_type, **options, &block)
+        @puppeteer_page.capybara_accept_modal(dialog_type, **options, &block)
+      end
+
+      def dismiss_modal(dialog_type, **options, &block)
+        @puppeteer_page.capybara_dismiss_modal(dialog_type, **options, &block)
+      end
+
       private def capybara_default_wait_time
         Capybara.default_max_wait_time * 1000
       end
