@@ -34,22 +34,35 @@ module Capybara
         caller_locations.any?{ |loc| loc.label.start_with?('assert_') }
       end
 
-      def find_xpath(query, **options)
+      private def find_with(wait_method, query_method, query, **options)
         unless called_from_assertion?
-          @puppeteer_page.capybara_current_frame.wait_for_xpath(query, timeout: capybara_default_wait_time)
+          begin
+            @puppeteer_page.capybara_current_frame.send(wait_method, query, timeout: capybara_default_wait_time)
+          rescue ::Puppeteer::TimeoutError => err
+            return [] # Leave Capybara to raise Capybara::ElementNotFound.
+          end
         end
-        @puppeteer_page.capybara_current_frame.Sx(query).map do |el|
-          Node.new(@driver, @puppeteer_page, el)
+
+        begin
+          @puppeteer_page.capybara_current_frame.send(query_method, query).map do |el|
+            Node.new(@driver, @puppeteer_page, el)
+          end
+        rescue => err
+          # Navigation occured during finding Node.
+          if err.message =~ /Cannot find context with specified id/
+            return [] # Rely on Capybara's retry.
+          end
+
+          raise
         end
       end
 
+      def find_xpath(query, **options)
+        find_with(:wait_for_xpath, :Sx, query, **options)
+      end
+
       def find_css(query, **options)
-        unless called_from_assertion?
-          @puppeteer_page.capybara_current_frame.wait_for_selector(query, timeout: capybara_default_wait_time)
-        end
-        @puppeteer_page.capybara_current_frame.query_selector_all(query).map do |el|
-          Node.new(@driver, @puppeteer_page, el)
-        end
+        find_with(:wait_for_selector, :query_selector_all, query, **options)
       end
 
       def response_headers

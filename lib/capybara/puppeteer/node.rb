@@ -251,7 +251,8 @@ module Capybara
 
       class FileUpload < Settable
         def set(value, **options)
-          @element.set_input_files(value, timeout: @timeout)
+          files = Array(value)
+          @element.upload_file(*files)
         end
       end
 
