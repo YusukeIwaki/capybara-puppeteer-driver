@@ -1,7 +1,56 @@
 require_relative './browser_options'
+require 'fileutils'
+require 'tmpdir'
 
 module Capybara
   module Puppeteer
+    module BrowserExtension
+      class Download
+        def initialize(guid, url:, download_dir:, suggested_filename:)
+          @guid = guid
+          @url = url
+          @download_dir = download_dir
+          @suggested_filename = suggested_filename
+        end
+
+        def complete
+          src = File.join(@download_dir, @suggested_filename)
+          dest = File.join(Capybara.save_path, @suggested_filename)
+          FileUtils.mkdir_p(Capybara.save_path)
+          FileUtils.mv(src, dest)
+        end
+      end
+
+      def set_download_behavior(behavior:, download_path:, events_enabled:)
+        @connection.send_message('Browser.setDownloadBehavior',
+          behavior: behavior,
+          downloadPath: download_path,
+          eventsEnabled: events_enabled,
+        )
+        @capybara_download_dir = download_path
+        @capybara_downloads = {}
+
+        @connection.on_event('Browser.downloadWillBegin') do |event|
+          guid = event['guid']
+          @capybara_downloads[guid] = Download.new(guid,
+                                        url: event['url'],
+                                        download_dir: @capybara_download_dir,
+                                        suggested_filename: event['suggestedFilename'])
+        end
+        @connection.on_event('Browser.downloadProgress') do |event|
+          guid = event['guid']
+          case event['state']
+          when 'completed'
+            @capybara_downloads.delete(guid).complete
+          when 'canceled'
+            @capybara_downloads.delete(guid)
+          end
+        end
+
+      end
+    end
+    ::Puppeteer::Browser.prepend(BrowserExtension)
+
     class Driver < ::Capybara::Driver::Base
       extend Forwardable
 
@@ -26,6 +75,10 @@ module Capybara
       private def create_puppeteer_browser
         main = Process.pid
         at_exit do
+          if @tmpdir_for_download
+            FileUtils.remove_entry(@tmpdir_for_download, true)
+            @tmpdir_for_download = nil
+          end
           # Store the exit status of the test run since it goes away after calling the at_exit proc...
           @exit_status = $ERROR_INFO.status if $ERROR_INFO.is_a?(SystemExit)
           quit if Process.pid == main
@@ -33,8 +86,21 @@ module Capybara
         end
 
         browser_options = @browser_options.value
-        ::Puppeteer.launch(**browser_options)
+        ::Puppeteer.launch(**browser_options).tap do |browser|
+          # allow File downloading manually.
+          # ref: https://github.com/puppeteer/puppeteer/issues/7337#issuecomment-866295829
+          browser.set_download_behavior(
+            behavior: 'allow',
+            download_path: tmpdir_for_download,
+            events_enabled: true,
+          )
+        end
       end
+
+      private def tmpdir_for_download
+        @tmpdir_for_download ||= Dir.mktmpdir
+      end
+
 
       private def quit
         @puppeteer_browser&.close
