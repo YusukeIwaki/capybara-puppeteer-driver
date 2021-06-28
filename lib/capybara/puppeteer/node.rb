@@ -346,12 +346,40 @@ module Capybara
         end
       end
 
+      private def parent_select_element
+        @element.Sx('ancestor::select').first
+      end
+
       def select_option
-        raise NotImplementedError
+        return false if disabled?
+
+        selected_options = []
+
+        select_element = parent_select_element
+        if select_element && select_element.evaluate('el => el.multiple')
+          selected_options = select_element.query_selector_all('option:checked')
+          return false if selected_options.any? { |option_element| option_element == @element }
+        end
+
+        @element.evaluate('option => option.selected = true')
+        select_element.evaluate(<<~JAVASCRIPT)
+        select => {
+          select.dispatchEvent(new Event('input', { 'bubbles': true }));
+          select.dispatchEvent(new Event('change', { 'bubbles': true }));
+        }
+        JAVASCRIPT
+
+        true
       end
 
       def unselect_option
-        raise NotImplementedError
+        if parent_select_element.evaluate('el => el.multiple')
+          return false if disabled?
+
+          @element.evaluate('el => el.selected = false')
+        else
+          raise Capybara::UnselectNotAllowed, 'Cannot unselect option from single select box.'
+        end
       end
 
       def click(keys = [], **options)
