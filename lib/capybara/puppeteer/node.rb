@@ -426,6 +426,7 @@ module Capybara
       end
 
       def send_keys(*args)
+        @element.click
         SendKeys.new(@element, @page.keyboard, args).execute
       end
 
@@ -521,7 +522,7 @@ module Capybara
                   _key = key.last
                   code =
                     if _key.is_a?(String) && _key.length == 1
-                      _key.upcase
+                      char_key_for(_key)
                     elsif _key.is_a?(Symbol)
                       key_for(_key)
                     else
@@ -542,7 +543,7 @@ module Capybara
                   key.each_char do |char|
                     executables << PressKey.new(
                       keyboard: @keyboard,
-                      key: char.upcase,
+                      key: char_key_for(char),
                       modifiers: modifiers,
                     )
                   end
@@ -568,6 +569,16 @@ module Capybara
           KEYS[key] or raise ArgumentError.new("invalid key specified: #{key}")
         end
 
+        private def char_key_for(key)
+          if key =~ /^[A-Z]$/
+            "Key#{key}"
+          elsif key =~ /^[a-z]$/
+            "Key#{key.upcase}"
+          else
+            key
+          end
+        end
+
         def execute
           @executables.each do |executable|
             executable.execute_for(@element_or_keyboard)
@@ -578,6 +589,7 @@ module Capybara
           def initialize(keyboard:, key:, modifiers:)
             # puts "PressKey: key=#{key} modifiers: #{modifiers}"
             @keyboard = keyboard
+            @key = key
             @modifiers = modifiers
           end
 
@@ -600,7 +612,7 @@ module Capybara
           end
 
           def execute_for(element)
-            element.type(@text)
+            element.type_text(@text)
           end
         end
       end
