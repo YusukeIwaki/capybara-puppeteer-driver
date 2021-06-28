@@ -119,6 +119,13 @@ module Capybara
         unless @element.evaluate('el => el.isConnected')
           raise StaleReferenceError.new('Node is already detached from document.')
         end
+      rescue ::Puppeteer::Connection::ProtocolError => err
+        # Navigation occured during finding Node.
+        if err.message =~ /Cannot find context with specified id/
+          raise StaleReferenceError.new('Node is already detached.')
+        end
+
+        raise
       end
 
       def all_text
