@@ -30,19 +30,7 @@ module Capybara
         @puppeteer_page.capybara_current_frame.evaluate('() => { location.reload(true) }')
       end
 
-      private def called_from_assertion?
-        caller_locations.any?{ |loc| loc.label.start_with?('assert_') }
-      end
-
-      private def find_with(wait_method, query_method, query, **options)
-        unless called_from_assertion?
-          begin
-            @puppeteer_page.capybara_current_frame.send(wait_method, query, timeout: capybara_default_wait_time)
-          rescue ::Puppeteer::TimeoutError => err
-            return [] # Leave Capybara to raise Capybara::ElementNotFound.
-          end
-        end
-
+      private def find_with(query_method, query, **options)
         begin
           @puppeteer_page.capybara_current_frame.send(query_method, query).map do |el|
             Node.new(@driver, @puppeteer_page, el)
@@ -58,11 +46,11 @@ module Capybara
       end
 
       def find_xpath(query, **options)
-        find_with(:wait_for_xpath, :Sx, query, **options)
+        find_with(:Sx, query, **options)
       end
 
       def find_css(query, **options)
-        find_with(:wait_for_selector, :query_selector_all, query, **options)
+        find_with(:query_selector_all, query, **options)
       end
 
       def response_headers
