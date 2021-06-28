@@ -115,7 +115,15 @@ module Capybara
         @element = element
       end
 
+      private def assert_element_not_stale
+        unless @element.evaluate('el => el.isConnected')
+          raise StaleReferenceError.new('Node is already detached from document.')
+        end
+      end
+
       def all_text
+        assert_element_not_stale
+
         text = @element.evaluate('(el) => el.textContent')
         text.to_s.gsub(/[\u200b\u200e\u200f]/, '')
             .gsub(/[\ \n\f\t\v\u2028\u2029]+/, ' ')
@@ -125,6 +133,8 @@ module Capybara
       end
 
       def visible_text
+        assert_element_not_stale
+
         return '' unless visible?
 
         text = @element.evaluate(<<~JAVASCRIPT)
@@ -145,6 +155,8 @@ module Capybara
       end
 
       def [](name)
+        assert_element_not_stale
+
         property(name) || attribute(name)
       end
 
@@ -168,6 +180,8 @@ module Capybara
       end
 
       def value
+        assert_element_not_stale
+
         # ref: https://github.com/teamcapybara/capybara/blob/f7ab0b5cd5da86185816c2d5c30d58145fe654ed/lib/capybara/selenium/node.rb#L31
         # ref: https://github.com/twalpole/apparition/blob/11aca464b38b77585191b7e302be2e062bdd369d/lib/capybara/apparition/node.rb#L728
         if tag_name == 'select' && @element.evaluate('el => el.multiple')
@@ -188,6 +202,8 @@ module Capybara
       # @param value [String, Array] Array is only allowed if node has 'multiple' attribute
       # @param options [Hash] Driver specific options for how to set a value on a node
       def set(value, **options)
+        assert_element_not_stale
+
         settable_class =
           case tag_name
           when 'input'
@@ -618,6 +634,8 @@ module Capybara
       end
 
       def hover
+        assert_element_not_stale
+
         @element.hover
       end
 
@@ -636,9 +654,9 @@ module Capybara
           shift: 'Shift',
         }.freeze
 
-        # @param page [Playwright::Page]
-        # @param source [Playwright::ElementHandle]
-        # @param target [Playwright::ElementHandle]
+        # @param page [Puppeteer::Page]
+        # @param source [Puppeteer::ElementHandle]
+        # @param target [Puppeteer::ElementHandle]
         def initialize(page, source, target, options)
           @page = page
           @source = source
@@ -667,7 +685,7 @@ module Capybara
           sleep_delay
         end
 
-        # @param element [Playwright::ElementHandle]
+        # @param element [Puppeteer::ElementHandle]
         private def center_of(element)
           box = element.bounding_box
           [box.x + box.width / 2, box.y + box.height / 2]
@@ -700,6 +718,8 @@ module Capybara
       end
 
       def scroll_by(x, y)
+        assert_element_not_stale
+
         js = <<~JAVASCRIPT
         (el, x, y) => {
           if (el.scrollBy){
@@ -715,6 +735,8 @@ module Capybara
       end
 
       def scroll_to(element, location, position = nil)
+        assert_element_not_stale
+
         # location, element = element, nil if element.is_a? Symbol
         if element.is_a?(Capybara::Puppeteer::Node)
           scroll_element_to_location(element, location)
@@ -783,6 +805,8 @@ module Capybara
       end
 
       def visible?
+        assert_element_not_stale
+
         # if an area element, check visibility of relevant image
         @element.evaluate(<<~JAVASCRIPT)
         function(el) {
@@ -815,18 +839,26 @@ module Capybara
       end
 
       def obscured?
+        assert_element_not_stale
+
         @element.capybara_obscured?
       end
 
       def checked?
+        assert_element_not_stale
+
         @element.evaluate('el => !!el.checked')
       end
 
       def selected?
+        assert_element_not_stale
+
         @element.evaluate('el => !!el.selected')
       end
 
       def disabled?
+        assert_element_not_stale
+
         @element.evaluate(<<~JAVASCRIPT)
         function(el) {
           const xpath = 'parent::optgroup[@disabled] | \
@@ -839,14 +871,20 @@ module Capybara
       end
 
       def readonly?
+        assert_element_not_stale
+
         @element.evaluate('el => el.readonly')
       end
 
       def multiple?
+        assert_element_not_stale
+
         @element.evaluate('el => el.multiple')
       end
 
       def rect
+        assert_element_not_stale
+
         @element.evaluate(<<~JAVASCRIPT)
         function(el){
           const rects = [...el.getClientRects()]
@@ -857,6 +895,8 @@ module Capybara
       end
 
       def path
+        assert_element_not_stale
+
         @element.evaluate(<<~JAVASCRIPT)
         (el) => {
           var xml = document;
@@ -993,12 +1033,16 @@ module Capybara
       end
 
       def find_xpath(query, **options)
+        assert_element_not_stale
+
         @element.Sx(query).map do |el|
           Node.new(@driver, @page, el)
         end
       end
 
       def find_css(query, **options)
+        assert_element_not_stale
+
         @element.query_selector_all(query).map do |el|
           Node.new(@driver, @page, el)
         end
