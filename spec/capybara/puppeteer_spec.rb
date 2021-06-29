@@ -16,7 +16,8 @@ Capybara::SpecHelper.run_specs TestSessions::Puppeteer, 'Puppeteer' do |example|
   when /#fill_in should fill in a textarea in a reasonable time by default/
     skip 'puppeteer-ruby is not so fast'
   when /Capybara::Window#maximize/,
-       /Capybara::Window#fullscreen/
+       /Capybara::Window#fullscreen/,
+       /Capybara::Window#size should switch to original window if invoked not for current window/
     skip 'not supported in Puppeteer driver'
   end
 
