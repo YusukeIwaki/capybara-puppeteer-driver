@@ -13,6 +13,8 @@ Capybara::SpecHelper.run_specs TestSessions::Puppeteer, 'Puppeteer' do |example|
     pending "NoMethodError: undefined method `and' for #<Capybara::RSpecMatchers::Matchers::HaveSelector:0x00007f9bafd56900>"
   when /drag_to.*HTML5/, /Element#drop/
     skip 'not implemented'
+  when /#fill_in should fill in a textarea in a reasonable time by default/
+    skip 'puppeteer-ruby is not so fast'
   when /Capybara::Window#maximize/,
        /Capybara::Window#fullscreen/
     skip 'not supported in Puppeteer driver'

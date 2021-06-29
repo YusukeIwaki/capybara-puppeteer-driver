@@ -305,7 +305,7 @@ module Capybara
             }
           }
           JAVASCRIPT
-          element.evaluate(js, arg: value)
+          element.evaluate(js, value)
         end
       end
 
