@@ -7,6 +7,14 @@ module Capybara
         @driver = driver
         @puppeteer_browser = puppeteer_browser
         @puppeteer_page = puppeteer_browser.pages.first || puppeteer_browser.new_page
+
+        @puppeteer_browser.on('targetdestroyed') do |target|
+          if target.type == 'page'
+            if target.target_id == @puppeteer_page&.target_id
+              @puppeteer_page = nil
+            end
+          end
+        end
       end
 
       def current_url
@@ -135,7 +143,7 @@ module Capybara
       end
 
       def current_window_handle
-        @puppeteer_page.capybara_id
+        @puppeteer_page&.capybara_id
       end
 
       def open_new_window(kind = :tab)
@@ -152,10 +160,20 @@ module Capybara
       end
 
       def switch_to_window(handle)
-        return if current_window_handle == handle
+        return if @puppeteer_page&.capybara_id == handle
 
         on_window(handle) do |page|
           @puppeteer_page = page.tap(&:bring_to_front)
+        end
+      end
+
+      def close_window(handle)
+        on_window(handle) do |page|
+          page.close
+        end
+
+        if @puppeteer_page&.capybara_id == handle
+          @puppeteer_page = nil
         end
       end
 
