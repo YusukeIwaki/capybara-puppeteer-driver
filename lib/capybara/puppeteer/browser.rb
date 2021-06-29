@@ -10,7 +10,7 @@ module Capybara
 
         @puppeteer_browser.on('targetdestroyed') do |target|
           if target.type == 'page'
-            if target.target_id == @puppeteer_page&.target_id
+            if target.target_id == @puppeteer_page&.capybara_id
               @puppeteer_page = nil
             end
           end
@@ -18,10 +18,14 @@ module Capybara
       end
 
       def current_url
+        assert_page_alive
+
         @puppeteer_page.url
       end
 
       def visit(path)
+        assert_page_alive
+
         url =
         if Capybara.app_host
           URI(Capybara.app_host).merge(path)
@@ -35,6 +39,8 @@ module Capybara
       end
 
       def refresh
+        assert_page_alive
+
         @puppeteer_page.capybara_current_frame.evaluate('() => { location.reload(true) }')
       end
 
@@ -54,22 +60,32 @@ module Capybara
       end
 
       def find_xpath(query, **options)
+        assert_page_alive
+
         find_with(:Sx, query, **options)
       end
 
       def find_css(query, **options)
+        assert_page_alive
+
         find_with(:query_selector_all, query, **options)
       end
 
       def response_headers
+        assert_page_alive
+
         @puppeteer_page.capybara_response_headers
       end
 
       def status_code
+        assert_page_alive
+
         @puppeteer_page.capybara_status_code
       end
 
       def html
+        assert_page_alive
+
         js = <<~JAVASCRIPT
         () => {
           let html = '';
@@ -82,28 +98,40 @@ module Capybara
       end
 
       def title
+        assert_page_alive
+
         @puppeteer_page.title
       end
 
       def go_back
+        assert_page_alive
+
         @puppeteer_page.go_back
       end
 
       def go_forward
+        assert_page_alive
+
         @puppeteer_page.go_forward
       end
 
       def execute_script(script, *args)
+        assert_page_alive
+
         @puppeteer_page.capybara_current_frame.evaluate("function () { #{script} }", *unwrap_node(args))
         nil
       end
 
       def evaluate_script(script, *args)
+        assert_page_alive
+
         result = @puppeteer_page.capybara_current_frame.evaluate_handle("function () { return #{script} }", *unwrap_node(args))
         wrap_node(result)
       end
 
       def evaluate_async_script(script, *args)
+        assert_page_alive
+
         js = <<~JAVASCRIPT
         function(){
           let args = Array.prototype.slice.call(arguments);
@@ -118,10 +146,14 @@ module Capybara
       end
 
       def send_keys(*args)
+        assert_page_alive
+
         Node::SendKeys.new(@puppeteer_page.keyboard, @puppeteer_page.keyboard, args).execute
       end
 
       def save_screenshot(path, **options)
+        assert_page_alive
+
         @puppeteer_page.screenshot(path: path)
       end
 
@@ -135,6 +167,12 @@ module Capybara
           puppeteer_frame = frame.native.content_frame
           raise ArgumentError.new("Not a frame element: #{frame}") unless puppeteer_frame
           @puppeteer_page.capybara_push_frame(puppeteer_frame)
+        end
+      end
+
+      private def assert_page_alive
+        if !@puppeteer_page || @puppeteer_page.closed?
+          raise NoSuchWindowError
         end
       end
 
@@ -178,10 +216,14 @@ module Capybara
       end
 
       def accept_modal(dialog_type, **options, &block)
+        assert_page_alive
+
         @puppeteer_page.capybara_accept_modal(dialog_type, **options, &block)
       end
 
       def dismiss_modal(dialog_type, **options, &block)
+        assert_page_alive
+
         @puppeteer_page.capybara_dismiss_modal(dialog_type, **options, &block)
       end
 
