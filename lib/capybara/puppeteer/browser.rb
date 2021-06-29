@@ -215,6 +215,31 @@ module Capybara
         end
       end
 
+      def window_size(handle)
+        on_window(handle) do |page|
+          page.evaluate('() => [window.innerWidth, window.innerHeight]')
+        end
+      end
+
+      def resize_window_to(handle, width, height)
+        on_window(handle) do |page|
+          page.viewport = ::Puppeteer::Viewport.new(width: width, height: height)
+        end
+      end
+
+      def maximize_window(handle)
+        on_window(handle) do |page|
+          screen_size = page.evaluate('() => ({ width: window.screen.width, height: window.screen.height})')
+          page.viewport = ::Puppeteer::Viewport.new(width: screen_size['width'], height: screen_size['height'])
+        end
+      end
+
+      def fullscreen_window(handle)
+        on_window(handle) do |page|
+          page.evaluate('() => document.body.requestFullscreen()')
+        end
+      end
+
       def accept_modal(dialog_type, **options, &block)
         assert_page_alive
 
