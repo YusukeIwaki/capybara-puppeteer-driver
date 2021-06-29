@@ -908,7 +908,7 @@ module Capybara
       def readonly?
         assert_element_not_stale
 
-        @element.evaluate('el => el.readonly')
+        @element.evaluate('el => el.readOnly')
       end
 
       def multiple?
