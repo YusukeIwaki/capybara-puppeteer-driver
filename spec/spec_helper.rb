@@ -3,6 +3,7 @@
 require 'bundler/setup'
 require 'capybara/puppeteer'
 require 'capybara/rspec'
+require 'timeout'
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -19,8 +20,11 @@ RSpec.configure do |config|
     metadata[:type] = :feature
   end
 
-  config.around(:each) do |example|
-    require 'timeout'
+  config.define_derived_metadata(file_path: %r(/spec/capybara/)) do |metadata|
+    metadata[:type] = :capybara
+  end
+
+  config.around(:each, type: :capybara) do |example|
     Timeout.timeout(15) { example.run }
   end
 end
