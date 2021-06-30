@@ -12,6 +12,11 @@ module Capybara
         capybara_initialize
       end
 
+      # object identifier used for Capybara
+      def capybara_id
+        @target.target_id
+      end
+
       private def capybara_initialize
         @capybara_all_responses = {}
         @capybara_last_response = nil
@@ -38,7 +43,7 @@ module Capybara
       private def capybara_on_unexpected_modal(dialog)
         puts "[WARNING] Unexpected modal - \"#{dialog.message}\""
         if dialog.type == 'beforeunload'
-          dialog.accept_async
+          dialog.accept
         else
           dialog.dismiss
         end
@@ -52,9 +57,9 @@ module Capybara
 
         def handle(dialog)
           if @dialog_type == :prompt
-            dialog.accept_async(promptText: @options[:with] || dialog.default_value)
+            dialog.accept(@options[:with] || dialog.default_value)
           else
-            dialog.accept_async
+            dialog.accept
           end
         end
       end

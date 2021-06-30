@@ -76,6 +76,41 @@ module Capybara
         frame
       end
 
+      # ref: https://github.com/twalpole/apparition/blob/11aca464b38b77585191b7e302be2e062bdd369d/lib/capybara/apparition/node.rb#L774
+      VISIBLE_JS = <<~JAVASCRIPT
+      function(el) {
+        if (el.tagName == 'AREA'){
+          const map_name = document.evaluate('./ancestor::map/@name', el, null, XPathResult.STRING_TYPE, null).stringValue;
+          el = document.querySelector(`img[usemap='#${map_name}']`);
+          if (!el){
+          return false;
+          }
+        }
+        var forced_visible = false;
+        while (el) {
+          const style = window.getComputedStyle(el);
+          if (style.visibility == 'visible')
+            forced_visible = true;
+          if ((style.display == 'none') ||
+              ((style.visibility == 'hidden') && !forced_visible) ||
+              (parseFloat(style.opacity) == 0)) {
+            return false;
+          }
+          var parent = el.parentElement;
+          if (parent && (parent.tagName == 'DETAILS') && !parent.open && (el.tagName != 'SUMMARY')) {
+            return false;
+          }
+          el = parent;
+        }
+        return true;
+      }
+      JAVASCRIPT
+
+      def capybara_visible?
+        # if an area element, check visibility of relevant image
+        evaluate(VISIBLE_JS)
+      end
+
       # ref: https://github.com/teamcapybara/capybara/blob/f7ab0b5cd5da86185816c2d5c30d58145fe654ed/lib/capybara/selenium/node.rb#L523
       OBSCURED_OR_OFFSET_SCRIPT = <<~JAVASCRIPT
       (el, x, y) => {
@@ -115,7 +150,22 @@ module Capybara
         @element = element
       end
 
+      private def assert_element_not_stale
+        unless @element.evaluate('el => el.isConnected')
+          raise StaleReferenceError.new('Node is already detached from document.')
+        end
+      rescue ::Puppeteer::Connection::ProtocolError => err
+        # Navigation occured during finding Node.
+        if err.message =~ /Cannot find context with specified id/
+          raise StaleReferenceError.new('Node is already detached.')
+        end
+
+        raise
+      end
+
       def all_text
+        assert_element_not_stale
+
         text = @element.evaluate('(el) => el.textContent')
         text.to_s.gsub(/[\u200b\u200e\u200f]/, '')
             .gsub(/[\ \n\f\t\v\u2028\u2029]+/, ' ')
@@ -125,7 +175,9 @@ module Capybara
       end
 
       def visible_text
-        return '' unless visible?
+        assert_element_not_stale
+
+        return '' unless @element.capybara_visible?
 
         text = @element.evaluate(<<~JAVASCRIPT)
           function(el){
@@ -145,11 +197,13 @@ module Capybara
       end
 
       def [](name)
+        assert_element_not_stale
+
         property(name) || attribute(name)
       end
 
       private def property(name)
-        @element.evaluate(<<~JAVASCRIPT)
+        js = <<~JAVASCRIPT
         (el, name) => {
           const value = el[name];
           if (['object', 'function'].includes(typeof value)) {
@@ -159,6 +213,8 @@ module Capybara
           }
         }
         JAVASCRIPT
+
+        @element.evaluate(js, name)
       end
 
       private def attribute(name)
@@ -166,6 +222,8 @@ module Capybara
       end
 
       def value
+        assert_element_not_stale
+
         # ref: https://github.com/teamcapybara/capybara/blob/f7ab0b5cd5da86185816c2d5c30d58145fe654ed/lib/capybara/selenium/node.rb#L31
         # ref: https://github.com/twalpole/apparition/blob/11aca464b38b77585191b7e302be2e062bdd369d/lib/capybara/apparition/node.rb#L728
         if tag_name == 'select' && @element.evaluate('el => el.multiple')
@@ -181,9 +239,13 @@ module Capybara
         raise NotImplementedError
       end
 
+      class NotActionableError < StandardError ; end
+
       # @param value [String, Array] Array is only allowed if node has 'multiple' attribute
       # @param options [Hash] Driver specific options for how to set a value on a node
       def set(value, **options)
+        assert_element_not_stale
+
         settable_class =
           case tag_name
           when 'input'
@@ -218,6 +280,8 @@ module Capybara
           end
 
         settable_class.new(@element, capybara_default_wait_time).set(value, **options)
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       class Settable
@@ -229,16 +293,20 @@ module Capybara
 
       class RadioButton < Settable
         def set(_, **options)
-          @element.check(timeout: @timeout)
+          @element.click
         end
       end
 
       class Checkbox < Settable
         def set(value, **options)
-          if value
-            @element.check(timeout: @timeout)
-          else
-            @element.uncheck(timeout: @timeout)
+          checked = @element.evaluate('el => !!el.checked')
+
+          if value && !checked
+            # check
+            @element.click
+          elsif !value && checked
+            # uncheck
+            @element.click
           end
         end
       end
@@ -251,7 +319,8 @@ module Capybara
 
       class FileUpload < Settable
         def set(value, **options)
-          @element.set_input_files(value, timeout: @timeout)
+          files = Array(value)
+          @element.upload_file(*files)
         end
       end
 
@@ -271,7 +340,7 @@ module Capybara
             }
           }
           JAVASCRIPT
-          element.evaluate(js, arg: value)
+          element.evaluate(js, value)
         end
       end
 
@@ -319,38 +388,82 @@ module Capybara
         end
       end
 
+      private def parent_select_element
+        @element.Sx('ancestor::select').first
+      end
+
       def select_option
-        raise NotImplementedError
+        assert_element_not_stale
+
+        return false if disabled?
+
+        selected_options = []
+
+        select_element = parent_select_element
+        if select_element && select_element.evaluate('el => el.multiple')
+          selected_options = select_element.query_selector_all('option:checked')
+          return false if selected_options.any? { |option_element| option_element == @element }
+        end
+
+        @element.evaluate('option => option.selected = true')
+        select_element.evaluate(<<~JAVASCRIPT)
+        select => {
+          select.dispatchEvent(new Event('input', { 'bubbles': true }));
+          select.dispatchEvent(new Event('change', { 'bubbles': true }));
+        }
+        JAVASCRIPT
+
+        true
       end
 
       def unselect_option
-        raise NotImplementedError
+        assert_element_not_stale
+
+        if parent_select_element.evaluate('el => el.multiple')
+          return false if disabled?
+
+          @element.evaluate('el => el.selected = false')
+        else
+          raise Capybara::UnselectNotAllowed, 'Cannot unselect option from single select box.'
+        end
       end
 
       def click(keys = [], **options)
+        assert_element_not_stale
+
         click_options = ClickOptions.new(@element, keys, options)
         params = click_options.as_params
         click_options.with_modifiers_pressing(@page.keyboard) do
           @element.click(**params)
         end
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       def right_click(keys = [], **options)
+        assert_element_not_stale
+
         click_options = ClickOptions.new(@element, keys, options)
         params = click_options.as_params
         params[:button] = 'right'
         click_options.with_modifiers_pressing(@page.keyboard) do
           @element.click(**params)
         end
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       def double_click(keys = [], **options)
+        assert_element_not_stale
+
         click_options = ClickOptions.new(@element, keys, options)
         params = click_options.as_params
         params[:click_count] = 2
         click_options.with_modifiers_pressing(@page.keyboard) do
           @element.click(**params)
         end
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       class ClickOptions
@@ -415,6 +528,9 @@ module Capybara
       end
 
       def send_keys(*args)
+        assert_element_not_stale
+
+        @element.click
         SendKeys.new(@element, @page.keyboard, args).execute
       end
 
@@ -510,7 +626,7 @@ module Capybara
                   _key = key.last
                   code =
                     if _key.is_a?(String) && _key.length == 1
-                      _key.upcase
+                      char_key_for(_key)
                     elsif _key.is_a?(Symbol)
                       key_for(_key)
                     else
@@ -531,7 +647,7 @@ module Capybara
                   key.each_char do |char|
                     executables << PressKey.new(
                       keyboard: @keyboard,
-                      key: char.upcase,
+                      key: char_key_for(char),
                       modifiers: modifiers,
                     )
                   end
@@ -557,6 +673,16 @@ module Capybara
           KEYS[key] or raise ArgumentError.new("invalid key specified: #{key}")
         end
 
+        private def char_key_for(key)
+          if key =~ /^[A-Z]$/
+            "Key#{key}"
+          elsif key =~ /^[a-z]$/
+            "Key#{key.upcase}"
+          else
+            key
+          end
+        end
+
         def execute
           @executables.each do |executable|
             executable.execute_for(@element_or_keyboard)
@@ -567,6 +693,7 @@ module Capybara
           def initialize(keyboard:, key:, modifiers:)
             # puts "PressKey: key=#{key} modifiers: #{modifiers}"
             @keyboard = keyboard
+            @key = key
             @modifiers = modifiers
           end
 
@@ -589,16 +716,20 @@ module Capybara
           end
 
           def execute_for(element)
-            element.type(@text)
+            element.type_text(@text)
           end
         end
       end
 
       def hover
+        assert_element_not_stale
+
         @element.hover
       end
 
       def drag_to(element, **options)
+        assert_element_not_stale
+
         DragTo.new(@page, @element, element.native, options).execute
       end
 
@@ -613,9 +744,9 @@ module Capybara
           shift: 'Shift',
         }.freeze
 
-        # @param page [Playwright::Page]
-        # @param source [Playwright::ElementHandle]
-        # @param target [Playwright::ElementHandle]
+        # @param page [Puppeteer::Page]
+        # @param source [Puppeteer::ElementHandle]
+        # @param target [Puppeteer::ElementHandle]
         def initialize(page, source, target, options)
           @page = page
           @source = source
@@ -644,7 +775,7 @@ module Capybara
           sleep_delay
         end
 
-        # @param element [Playwright::ElementHandle]
+        # @param element [Puppeteer::ElementHandle]
         private def center_of(element)
           box = element.bounding_box
           [box.x + box.width / 2, box.y + box.height / 2]
@@ -677,6 +808,8 @@ module Capybara
       end
 
       def scroll_by(x, y)
+        assert_element_not_stale
+
         js = <<~JAVASCRIPT
         (el, x, y) => {
           if (el.scrollBy){
@@ -692,6 +825,8 @@ module Capybara
       end
 
       def scroll_to(element, location, position = nil)
+        assert_element_not_stale
+
         # location, element = element, nil if element.is_a? Symbol
         if element.is_a?(Capybara::Puppeteer::Node)
           scroll_element_to_location(element, location)
@@ -760,50 +895,32 @@ module Capybara
       end
 
       def visible?
-        # if an area element, check visibility of relevant image
-        @element.evaluate(<<~JAVASCRIPT)
-        function(el) {
-          if (el.tagName == 'AREA'){
-            const map_name = document.evaluate('./ancestor::map/@name', el, null, XPathResult.STRING_TYPE, null).stringValue;
-            el = document.querySelector(`img[usemap='#${map_name}']`);
-            if (!el){
-            return false;
-            }
-          }
-          var forced_visible = false;
-          while (el) {
-            const style = window.getComputedStyle(el);
-            if (style.visibility == 'visible')
-              forced_visible = true;
-            if ((style.display == 'none') ||
-                ((style.visibility == 'hidden') && !forced_visible) ||
-                (parseFloat(style.opacity) == 0)) {
-              return false;
-            }
-            var parent = el.parentElement;
-            if (parent && (parent.tagName == 'DETAILS') && !parent.open && (el.tagName != 'SUMMARY')) {
-              return false;
-            }
-            el = parent;
-          }
-          return true;
-        }
-        JAVASCRIPT
+        assert_element_not_stale
+
+        @element.capybara_visible?
       end
 
       def obscured?
+        assert_element_not_stale
+
         @element.capybara_obscured?
       end
 
       def checked?
+        assert_element_not_stale
+
         @element.evaluate('el => !!el.checked')
       end
 
       def selected?
+        assert_element_not_stale
+
         @element.evaluate('el => !!el.selected')
       end
 
       def disabled?
+        assert_element_not_stale
+
         @element.evaluate(<<~JAVASCRIPT)
         function(el) {
           const xpath = 'parent::optgroup[@disabled] | \
@@ -816,14 +933,20 @@ module Capybara
       end
 
       def readonly?
-        @element.evaluate('el => el.readonly')
+        assert_element_not_stale
+
+        @element.evaluate('el => el.readOnly')
       end
 
       def multiple?
+        assert_element_not_stale
+
         @element.evaluate('el => el.multiple')
       end
 
       def rect
+        assert_element_not_stale
+
         @element.evaluate(<<~JAVASCRIPT)
         function(el){
           const rects = [...el.getClientRects()]
@@ -834,6 +957,8 @@ module Capybara
       end
 
       def path
+        assert_element_not_stale
+
         @element.evaluate(<<~JAVASCRIPT)
         (el) => {
           var xml = document;
@@ -866,6 +991,8 @@ module Capybara
       end
 
       def trigger(event)
+        assert_element_not_stale
+
         Trigger.new(@element, event).execute
       end
 
@@ -970,12 +1097,16 @@ module Capybara
       end
 
       def find_xpath(query, **options)
+        assert_element_not_stale
+
         @element.Sx(query).map do |el|
           Node.new(@driver, @page, el)
         end
       end
 
       def find_css(query, **options)
+        assert_element_not_stale
+
         @element.query_selector_all(query).map do |el|
           Node.new(@driver, @page, el)
         end
