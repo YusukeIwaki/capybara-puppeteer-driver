@@ -1,3 +1,6 @@
+[![Gem Version](https://badge.fury.io/rb/capybara-puppeteer-driver.svg)](https://badge.fury.io/rb/capybara-puppeteer-driver)
+
+
 # `puppeteer-ruby`-based driver for Capybara
 
 Alternative headless-Chrome driver for Capybara, using [puppeteer-ruby](https://github.com/YusukeIwaki/puppeteer-ruby)
