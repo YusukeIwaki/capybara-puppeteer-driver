@@ -217,7 +217,7 @@ module Capybara
 
       def window_size(handle)
         on_window(handle) do |page|
-          page.evaluate('() => [window.outerWidth || window.innerWidth, window.outerHeight || window.innerHeight]')
+          page.evaluate('() => [window.innerWidth, window.innerHeight]')
         end
       end
 
