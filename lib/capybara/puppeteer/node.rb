@@ -76,6 +76,41 @@ module Capybara
         frame
       end
 
+      # ref: https://github.com/twalpole/apparition/blob/11aca464b38b77585191b7e302be2e062bdd369d/lib/capybara/apparition/node.rb#L774
+      VISIBLE_JS = <<~JAVASCRIPT
+      function(el) {
+        if (el.tagName == 'AREA'){
+          const map_name = document.evaluate('./ancestor::map/@name', el, null, XPathResult.STRING_TYPE, null).stringValue;
+          el = document.querySelector(`img[usemap='#${map_name}']`);
+          if (!el){
+          return false;
+          }
+        }
+        var forced_visible = false;
+        while (el) {
+          const style = window.getComputedStyle(el);
+          if (style.visibility == 'visible')
+            forced_visible = true;
+          if ((style.display == 'none') ||
+              ((style.visibility == 'hidden') && !forced_visible) ||
+              (parseFloat(style.opacity) == 0)) {
+            return false;
+          }
+          var parent = el.parentElement;
+          if (parent && (parent.tagName == 'DETAILS') && !parent.open && (el.tagName != 'SUMMARY')) {
+            return false;
+          }
+          el = parent;
+        }
+        return true;
+      }
+      JAVASCRIPT
+
+      def capybara_visible?
+        # if an area element, check visibility of relevant image
+        evaluate(VISIBLE_JS)
+      end
+
       # ref: https://github.com/teamcapybara/capybara/blob/f7ab0b5cd5da86185816c2d5c30d58145fe654ed/lib/capybara/selenium/node.rb#L523
       OBSCURED_OR_OFFSET_SCRIPT = <<~JAVASCRIPT
       (el, x, y) => {
@@ -142,7 +177,7 @@ module Capybara
       def visible_text
         assert_element_not_stale
 
-        return '' unless visible?
+        return '' unless @element.capybara_visible?
 
         text = @element.evaluate(<<~JAVASCRIPT)
           function(el){
@@ -842,35 +877,7 @@ module Capybara
       def visible?
         assert_element_not_stale
 
-        # if an area element, check visibility of relevant image
-        @element.evaluate(<<~JAVASCRIPT)
-        function(el) {
-          if (el.tagName == 'AREA'){
-            const map_name = document.evaluate('./ancestor::map/@name', el, null, XPathResult.STRING_TYPE, null).stringValue;
-            el = document.querySelector(`img[usemap='#${map_name}']`);
-            if (!el){
-            return false;
-            }
-          }
-          var forced_visible = false;
-          while (el) {
-            const style = window.getComputedStyle(el);
-            if (style.visibility == 'visible')
-              forced_visible = true;
-            if ((style.display == 'none') ||
-                ((style.visibility == 'hidden') && !forced_visible) ||
-                (parseFloat(style.opacity) == 0)) {
-              return false;
-            }
-            var parent = el.parentElement;
-            if (parent && (parent.tagName == 'DETAILS') && !parent.open && (el.tagName != 'SUMMARY')) {
-              return false;
-            }
-            el = parent;
-          }
-          return true;
-        }
-        JAVASCRIPT
+        @element.capybara_visible?
       end
 
       def obscured?
