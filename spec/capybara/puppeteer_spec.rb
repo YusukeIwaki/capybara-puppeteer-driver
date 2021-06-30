@@ -18,6 +18,11 @@ Capybara::SpecHelper.run_specs TestSessions::Puppeteer, 'Puppeteer' do |example|
   when /Capybara::Window#maximize/,
        /Capybara::Window#fullscreen/
     skip 'not supported in Puppeteer driver'
+  when /Capybara::Window#size/
+    # Puppeteer only changes viewport size. Window size is not chaned.
+    # Capybara's spec calculates the expected window_size with window.outerWidth/outerHeight.
+    # It returns window's size not a viewport size.
+    skip 'Not working with outerWidth/Height.'
   when /#click should not retry clicking when wait is disabled/
     # FIXME: hit-test is not implemented.
     pending 'FIXME'
