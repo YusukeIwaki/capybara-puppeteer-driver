@@ -393,6 +393,8 @@ module Capybara
       end
 
       def select_option
+        assert_element_not_stale
+
         return false if disabled?
 
         selected_options = []
@@ -415,6 +417,8 @@ module Capybara
       end
 
       def unselect_option
+        assert_element_not_stale
+
         if parent_select_element.evaluate('el => el.multiple')
           return false if disabled?
 
@@ -425,29 +429,41 @@ module Capybara
       end
 
       def click(keys = [], **options)
+        assert_element_not_stale
+
         click_options = ClickOptions.new(@element, keys, options)
         params = click_options.as_params
         click_options.with_modifiers_pressing(@page.keyboard) do
           @element.click(**params)
         end
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       def right_click(keys = [], **options)
+        assert_element_not_stale
+
         click_options = ClickOptions.new(@element, keys, options)
         params = click_options.as_params
         params[:button] = 'right'
         click_options.with_modifiers_pressing(@page.keyboard) do
           @element.click(**params)
         end
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       def double_click(keys = [], **options)
+        assert_element_not_stale
+
         click_options = ClickOptions.new(@element, keys, options)
         params = click_options.as_params
         params[:click_count] = 2
         click_options.with_modifiers_pressing(@page.keyboard) do
           @element.click(**params)
         end
+      rescue ::Puppeteer::ElementHandle::ElementNotVisibleError => err
+        raise NotActionableError.new(err)
       end
 
       class ClickOptions
@@ -512,6 +528,8 @@ module Capybara
       end
 
       def send_keys(*args)
+        assert_element_not_stale
+
         @element.click
         SendKeys.new(@element, @page.keyboard, args).execute
       end
@@ -710,6 +728,8 @@ module Capybara
       end
 
       def drag_to(element, **options)
+        assert_element_not_stale
+
         DragTo.new(@page, @element, element.native, options).execute
       end
 
@@ -971,6 +991,8 @@ module Capybara
       end
 
       def trigger(event)
+        assert_element_not_stale
+
         Trigger.new(@element, event).execute
       end
 
