@@ -6,6 +6,7 @@ module Capybara
       end
 
       LAUNCH_PARAMS = {
+        channel: nil,
         executable_path: nil,
         headless: nil,
       }.keys

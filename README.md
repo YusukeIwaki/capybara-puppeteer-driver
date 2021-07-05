@@ -19,8 +19,18 @@ require 'capybara/puppeteer'
 # Setup
 Capybara.register_driver(:puppeteer) do |app|
   Capybara::Puppeteer::Driver.new(app,
-    executable_path: '/usr/bin/google-chrome', # specify the executable path of Google Chrome.
-    headless: false, # optional. default: true (headless)
+    # Specify browser type.
+    # Either of 'chrome', 'chrome-beta', 'chrome-canary', 'chrome-dev', 'msedge'.
+    # chrome is used by default.
+    channel: 'msedge',
+    # Or specify the executable path of Google Chrome.
+    # Useful option for Docker integration.
+    # When channel is specified, executable_path is ignored.
+    executable_path: '/usr/bin/google-chrome',
+
+    # `headless: false` -> headful mode.
+    # `headless: true` -> headless mode. (default)
+    headless: false,
   )
 end
 Capybara.default_max_wait_time = 15
