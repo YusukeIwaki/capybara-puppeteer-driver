@@ -32,6 +32,8 @@ module Capybara
           @capybara_last_response = @capybara_all_responses[frame.url]
           @capybara_all_responses.clear
         end
+
+        self.drag_interception_enabled = true
       end
 
       private def capybara_dialog_event_handler
