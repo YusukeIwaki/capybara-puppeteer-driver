@@ -6,13 +6,12 @@ jobs:
   check:
     name: RSpec
     runs-on: ubuntu-latest
-    container: circleci/ruby:2.7.3-buster-node-browsers
     steps:
-      # @see https://docs.github.com/actions/reference/virtual-environments-for-github-hosted-runners#docker-container-filesystem
-      - name: Setup file system permissions
-        run: sudo chmod -R 777 $GITHUB_WORKSPACE /github /__w/_temp
       - uses: actions/checkout@v2
-      - name: Install dependencies
-        run: gem install bundler:2.2.3 && bundle install --path vendor/bundle
-      - run: bundle exec rspec --format documentation
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.0.2
+          bundler-cache: true
+      - uses: browser-actions/setup-chrome@latest
+      - run: CHROME_EXECUTABLE_PATH=$(which chrome) bundle exec rspec --format documentation
         timeout-minutes: 45
