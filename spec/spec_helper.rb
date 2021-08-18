@@ -30,7 +30,15 @@ RSpec.configure do |config|
 end
 
 Capybara.register_driver(:puppeteer) do |app|
-  Capybara::Puppeteer::Driver.new(app, headless: ENV['CI'] ? true : false)
+  driver_options = {}
+  if ENV['CI']
+    driver_options[:headless] = true
+    driver_options[:executable_path] = ENV['CHROME_EXECUTABLE_PATH']
+  else
+    driver_options[:headless] = false
+  end
+  driver_options.compact!
+  Capybara::Puppeteer::Driver.new(app, **driver_options)
 end
 
 Capybara.default_driver = :puppeteer
