@@ -66,10 +66,6 @@ module Capybara
       end
 
       def find_css(query, **options)
-        if query.start_with?('//')
-          return find_xpath(query, **options)
-        end
-
         assert_page_alive
 
         find_with(:query_selector_all, query, **options)
