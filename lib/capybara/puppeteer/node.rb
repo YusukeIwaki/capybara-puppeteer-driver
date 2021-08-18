@@ -758,27 +758,21 @@ module Capybara
           @source.scroll_into_view_if_needed
 
           # down
-          position_from = center_of(@source)
-          @page.mouse.move(*position_from)
+          position_from = @source.clickable_point
+          @page.mouse.move(position_from.x, position_from.y)
           @page.mouse.down
 
           @target.scroll_into_view_if_needed
 
           # move and up
           sleep_delay
-          position_to = center_of(@target)
+          position_to = @target.clickable_point
           with_key_pressing(drop_modifiers) do
-            @page.mouse.move(*position_to, steps: 6)
+            @page.mouse.move(position_to.x, position_to.y, steps: 6)
             sleep_delay
             @page.mouse.up
           end
           sleep_delay
-        end
-
-        # @param element [Puppeteer::ElementHandle]
-        private def center_of(element)
-          box = element.bounding_box
-          [box.x + box.width / 2, box.y + box.height / 2]
         end
 
         private def with_key_pressing(keys, &block)
