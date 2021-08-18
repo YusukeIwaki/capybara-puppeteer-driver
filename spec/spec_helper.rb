@@ -27,6 +27,13 @@ RSpec.configure do |config|
   config.around(:each, type: :capybara) do |example|
     Timeout.timeout(15) { example.run }
   end
+
+  config.around(:each, type: :feature) do |example|
+    default_selector = Capybara.default_selector
+    Capybara.default_selector = :css
+    example.run
+    Capybara.default_selector = default_selector
+  end
 end
 
 Capybara.register_driver(:puppeteer) do |app|
