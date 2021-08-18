@@ -138,6 +138,17 @@ module Capybara
     end
     ::Puppeteer::ElementHandle.prepend(ElementHandlePatch)
 
+    module MousePatch
+      def capybara_async_wait_for_drag_intercepted(&block)
+        Concurrent::Promises.resolvable_future.tap do |f|
+          @client.once('Input.dragIntercepted') do |event|
+            f.fulfill(event['data'])
+          end
+        end
+      end
+    end
+    ::Puppeteer::Mouse.prepend(MousePatch)
+
     # ref:
     #   selenium:   https://github.com/teamcapybara/capybara/blob/master/lib/capybara/selenium/node.rb
     #   apparition: https://github.com/twalpole/apparition/blob/master/lib/capybara/apparition/node.rb
@@ -759,6 +770,7 @@ module Capybara
 
           # down
           position_from = @source.clickable_point
+          drag_intercepted_promise = @page.mouse.capybara_async_wait_for_drag_intercepted
           @page.mouse.move(position_from.x, position_from.y)
           @page.mouse.down
 
@@ -769,7 +781,16 @@ module Capybara
           position_to = @target.clickable_point
           with_key_pressing(drop_modifiers) do
             @page.mouse.move(position_to.x, position_to.y, steps: 6)
-            sleep_delay
+            if drag_intercepted_promise.fulfilled?
+              # dispatch HTML5 drag events
+              data = drag_intercepted_promise.value!
+              @page.mouse.drag_enter(position_to, data)
+              @page.mouse.drag_over(position_to, data)
+              sleep_delay
+              @page.mouse.drop(position_to, data)
+            else
+              sleep_delay
+            end
             @page.mouse.up
           end
           sleep_delay
@@ -794,6 +815,16 @@ module Capybara
           return unless @options[:delay]
 
           sleep @options[:delay]
+        end
+
+        private def inject_drag_drop_event_with(drag_intercepted_promise, position_to)
+          unless drag_intercepted_promise.fulfilled?
+            return
+          end
+
+          data = drag_intercepted_promise.value!
+          @page.mouse.drag_enter(position_to, data)
+          @page.mouse.drag_over(position_to, data)
         end
       end
 
