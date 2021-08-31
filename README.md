@@ -1,5 +1,15 @@
 [![Gem Version](https://badge.fury.io/rb/capybara-puppeteer-driver.svg)](https://badge.fury.io/rb/capybara-puppeteer-driver)
 
+**IMPORTANT**
+
+This Gem is just my hobby work and **not production-ready** at this moment.
+
+If you really want to use Puppeteer with Capybara, refer this guide at first:
+[Use Puppeteer methods simply without Capybara::DSL](https://github.com/YusukeIwaki/puppeteer-ruby#bulb-use-puppeteer-methods-simply-without-capybaradsl)
+
+It is STRONGLY encouraged to use Puppeteer without this driver or Capybara DSL because useful methods of Puppeteer (such as `Page#wait_for_selector` or `Page#wait_for_navigation`) are unavailable via Capybara DSL.
+
+---
 
 # `puppeteer-ruby`-based driver for Capybara
 
